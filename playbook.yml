@@ -1,0 +1,58 @@
+---
+- hosts: all
+  sudo: true
+
+  tasks:
+
+  - name: install nginx
+    apt: name=nginx state=latest
+
+  - name: install postgresql
+    apt: name=postgresql state=latest
+
+  - name: ensure that postgresql is started
+    service: name=postgresql state=running
+
+  - name: installing phhhh
+    apt: pkg={{item}}
+    with_items:
+      - php5-fpm
+      - php5-curl
+      - php5-gd
+      - php5-intl
+      - php5-json
+      - php5-ldap
+      - php5-mcrypt
+      - php5-pgsql
+      - php5-readline
+      - php-xml-parser
+
+  - command: su postgres -c "psql -c \"CREATE USER username WITH PASSWORD 'password';\""
+  - command: su postgres -c "psql -c \"CREATE DATABASE owncloud TEMPLATE template0 ENCODING 'UNICODE';\""
+  - command: su postgres -c "psql -c \"ALTER DATABASE owncloud OWNER TO username;\""
+  - command: su postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE owncloud TO username;\""
+
+  - command: mkdir -p /var/www/owncloud/
+  - command: wget -q --no-check-certificate https://download.owncloud.org/community/owncloud-8.2.2.tar.bz2
+    args:
+      chdir: /var/www/owncloud/
+  
+  - command: tar xjvf owncloud-8.2.2.tar.bz2
+    args:
+      chdir: /var/www/owncloud/
+
+  - command: mv /var/www/owncloud/owncloud /var/www/owncloud/public_html
+  - command: php /var/www/owncloud/public_html/occ  maintenance:install --database "pgsql" --database-name "owncloud" --database-user "username" --database-pass "password" --admin-user "admin" --admin-pass "admin"
+    args:
+      chdir: /var/www/owncloud/public_html
+
+  - command: chown www-data:www-data -R /var/www/owncloud/public_html
+  - command: mkdir -p /etc/nginx/site-conf/
+
+  - command: ln -s /etc/nginx/sites-available/owncloud /etc/nginx/sites-enabled/owncloud
+  - command: rm /etc/nginx/sites-enabled/default
+
+  - template: src=template/etc/nginx/sites-available/owncloud dest=/etc/nginx/sites-available/owncloud
+  - template: src=template/etc/nginx/site-conf/owncloud dest=/etc/nginx/site-conf/owncloud
+
+  - command: /etc/init.d/nginx restart
